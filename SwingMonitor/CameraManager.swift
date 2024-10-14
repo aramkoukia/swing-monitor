@@ -20,6 +20,15 @@ class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, Obs
         setupCamera()
     }
 
+    private lazy var yourModel: VNCoreMLModel = {
+        do {
+            let model = try VNCoreMLModel(for: YOLOv3Tiny().model) // Replace YourModel with your model class name
+            return model
+        } catch {
+            fatalError("Could not load model: \(error)")
+        }
+    }()
+    
     private func setupCamera() {
         guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { return }
         let videoInput: AVCaptureDeviceInput
@@ -80,26 +89,32 @@ class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, Obs
     }
 
     private func detectObjectPosition(from pixelBuffer: CVPixelBuffer) -> CGPoint {
+        var detectedPoint = CGPoint(x: 0.5, y: 0.5) // Default to center if nothing detected
+
         // Create a request to detect objects
         let request = VNCoreMLRequest(model: yourModel) { request, error in
+            guard error == nil else {
+                print("Error during VNCoreMLRequest: \(error!)")
+                return
+            }
+
             if let results = request.results as? [VNRecognizedObjectObservation] {
                 // Process detected objects
                 for observation in results {
                     // Get the bounding box of the detected object
                     let boundingBox = observation.boundingBox
-                    
-                    // Convert the bounding box to the coordinate system of the camera view
-                    let size = CGSize(width: boundingBox.width * UIScreen.main.bounds.width,
-                                      height: boundingBox.height * UIScreen.main.bounds.height)
-                    let origin = CGPoint(x: boundingBox.origin.x * UIScreen.main.bounds.width,
-                                         y: (1 - boundingBox.origin.y - boundingBox.height) * UIScreen.main.bounds.height)
 
                     // Calculate the center point of the bounding box
-                    return CGPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
+                    let centerX = boundingBox.origin.x + boundingBox.width / 2
+                    let centerY = boundingBox.origin.y + boundingBox.height / 2
+
+                    // Convert normalized coordinates to the camera view's coordinate system
+                    detectedPoint = CGPoint(x: centerX, y: centerY)
+                    break // If you only care about the first detected object, break after the first
                 }
             }
         }
-        
+
         // Create the Vision request handler
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
         do {
@@ -108,8 +123,7 @@ class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, Obs
             print("Failed to perform object detection: \(error)")
         }
 
-        // Return a default value if no object was detected
-        return CGPoint(x: 0.5, y: 0.5) // Default to center if nothing detected
+        return detectedPoint
     }
 
 }
