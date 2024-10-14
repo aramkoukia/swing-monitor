@@ -4,6 +4,7 @@ struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
     @State private var isRunning = false
 
+
     var body: some View {
         VStack {
             Text(String(format: "Speed: %.2f m/s", cameraManager.speed))
